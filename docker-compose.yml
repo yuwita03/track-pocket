@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/trackpocket
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: trackpocket
+    ports:
+      - "5432:5432"
