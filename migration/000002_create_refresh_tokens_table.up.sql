@@ -5,6 +5,6 @@ CREATE TABLE IF NOT EXISTS refresh_token(
     revoked         BOOLEAN NOT NULL DEFAULT FALSE,
     expired_at      TIMESTAMPTZ NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-)
+);
 
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_token(user_id);
