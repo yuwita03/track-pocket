@@ -8,15 +8,15 @@ import (
 )
 
 func HealthCheck(db *sql.DB)gin.HandlerFunc {
-	return func(c *gin.Context){
+	return func(ctx *gin.Context){
 		if err := db.Ping(); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
+			ctx.JSON(http.StatusServiceUnavailable, gin.H{
 				"Status": "DOWN",
 				"Database":"Unreachable",
 			})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
+		ctx.JSON(http.StatusOK, gin.H{
 			"Status":"OK",
 			"Database": "connected",
 		})

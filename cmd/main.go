@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"trackpocket/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -17,7 +18,9 @@ func main() {
 	}
 	defer conn.Close(context.Background())
 
-	router:= gin.Default()
+	router := gin.New()
+	router.Use(middleware.Logger())
+	router.Use(gin.Recovery())
 
 	router.GET("/health", func(c *gin.Context){
 		c.JSON(200, gin.H{
