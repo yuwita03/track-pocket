@@ -1,12 +1,17 @@
 package web
 
+import (
+	"github.com/google/uuid"
+)
+
 type AuthResponse struct {
-	User  UserResponse `json:"user"`
-	Token string       `json:"Token"`
+	User         UserResponse `json:"user"`
+	Token        string       `json:"token"`
+	RefreshToken string       `json:"refresh_token"`
 }
 
 type UserResponse struct {
-	Id    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	ID    uuid.UUID   	`json:"id"`
+	Name  string 		`json:"name"`
+	Email string 		`json:"email"`
 }

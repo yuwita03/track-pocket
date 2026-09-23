@@ -2,30 +2,102 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	pgxdecimal "github.com/jackc/pgx-shopspring-decimal"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"trackpocket/internal/email"
+	"trackpocket/internal/handler"
+	"trackpocket/internal/middleware"
+	"trackpocket/internal/repository"
+	"trackpocket/internal/service"
 )
 
 func main() {
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	dbURL := os.Getenv("DATABASE_URL")
+
+	config, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("failed to parse database config: %v", err)
 	}
-	defer conn.Close(context.Background())
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		pgxdecimal.Register(conn.TypeMap())
+		return nil
+	}
 
-	router:= gin.Default()
+	dbPool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer dbPool.Close()
 
-	router.GET("/health", func(c *gin.Context){
-		c.JSON(200, gin.H{
-			"status": "OK",
-		})
+	jwtSecret := os.Getenv("JWT_SECRET")
+	tokenExpiry := 15 * time.Minute
+
+	// 1. Repositories
+	userRepo := repository.NewUserRepository(dbPool)
+	refreshTokenRepo := repository.NewRefreshTokenRepository(dbPool)
+	passwordResetRepo := repository.NewPasswordResetTokenRepository(dbPool)
+	emailVerificationRepo := repository.NewEmailVerificationTokenRepository(dbPool)
+	categoryRepo := repository.NewCategoryRepository(dbPool)
+	transactionRepo := repository.NewTransactionRepository(dbPool)
+
+	// 2. External dependencies
+	emailSender := email.NewLogSender()
+
+	// 3. Services
+	categoryService := service.NewCategoryService(categoryRepo)
+	authService := service.NewAuthService(userRepo, refreshTokenRepo, passwordResetRepo, emailVerificationRepo, categoryService, emailSender, jwtSecret, tokenExpiry)
+	transactionService := service.NewTransactionService(transactionRepo, categoryRepo)
+
+	// 4. Handlers
+	authHandler := handler.NewAuthHandler(authService)
+	categoryHandler := handler.NewCategoryHandler(categoryService)
+	transactionHandler := handler.NewTransactionHandler(transactionService)
+
+	router := gin.New()
+	router.Use(middleware.Logger())
+	router.Use(gin.Recovery())
+
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	router.Run(":8080")
+	auth := router.Group("/api/v1/auth")
+	{
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/refresh", authHandler.Refresh)
+		auth.POST("/logout", authHandler.Logout)
+		auth.POST("/forgot-password", authHandler.ForgotPassword)
+		auth.POST("/reset-password", authHandler.ResetPassword)
+		auth.POST("/verify-email", authHandler.VerifyEmail)
+		auth.POST("/resend-verification", authHandler.ResendVerification)
+		auth.GET("/me", middleware.JWTAuth(jwtSecret), authHandler.Me)
+	}
 
-	fmt.Println("Connected to PostgreSQL suceed!")
+	categories := router.Group("/api/v1/categories")
+	categories.Use(middleware.JWTAuth(jwtSecret))
+	{
+		categories.POST("", categoryHandler.Create)
+		categories.GET("", categoryHandler.FindAll)
+		categories.PATCH("/:id", categoryHandler.Update)
+		categories.DELETE("/:id", categoryHandler.Delete)
+	}
+
+	transactions := router.Group("/api/v1/transactions")
+	transactions.Use(middleware.JWTAuth(jwtSecret))
+	{
+		transactions.POST("", transactionHandler.Create)
+		transactions.GET("", transactionHandler.FindAll)
+		transactions.PATCH("/:id", transactionHandler.Update)
+		transactions.DELETE("/:id", transactionHandler.Delete)
+	}
+
+	router.Run(":8080")
 }

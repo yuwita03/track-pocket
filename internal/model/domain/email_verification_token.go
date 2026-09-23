@@ -6,13 +6,11 @@ import (
 	"github.com/google/uuid"
 )
 
-type Category struct {
+type EmailVerificationToken struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
-	Name      string
-	Type      string
-	IsDefault bool
-	IsActive  bool
+	TokenHash string
+	Used      bool
+	ExpiredAt time.Time
 	CreatedAt time.Time
-	UpdatedAt time.Time
 }
