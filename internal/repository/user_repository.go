@@ -12,6 +12,9 @@ import (
 type UserRepository interface {
 	Register(ctx context.Context, user domain.User) (domain.User, error)
 	FindByEmail(ctx context.Context, email string) (domain.User, error)
+	FindByID(ctx context.Context, id uuid.UUID) (domain.User, error)
+	UpdatePassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error
+	MarkEmailVerified(ctx context.Context, userID uuid.UUID) error
 }
 
 type UserRepositoryImpl struct {
@@ -62,4 +65,37 @@ func (repository *UserRepositoryImpl) FindByEmail(ctx context.Context, email str
 	}
 
 	return user, nil
+}
+
+func (repository *UserRepositoryImpl) FindByID(ctx context.Context, id uuid.UUID)(domain.User, error){
+	query:=`
+	SELECT id, name, email, password_hash, is_verified, created_at, updated_at
+	FROM users WHERE id = $1`
+
+	var user domain.User
+	err := repository.DB.QueryRow(ctx, query, id).Scan(
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.PasswordHash,
+		&user.IsVerified,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		return user, err
+	}
+	return user, nil
+}
+
+func (repository *UserRepositoryImpl) UpdatePassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error {
+	query := `UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
+	_, err := repository.DB.Exec(ctx, query, newPasswordHash, userID)
+	return err
+}
+
+func (repository *UserRepositoryImpl) MarkEmailVerified(ctx context.Context, userID uuid.UUID) error {
+	query := `UPDATE users SET is_verified = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`
+	_, err := repository.DB.Exec(ctx, query, userID)
+	return err
 }
