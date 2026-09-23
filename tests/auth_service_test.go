@@ -32,12 +32,15 @@ func newTestAuthService() (
 	*RefreshTokenRepositoryMock,
 	*PasswordResetTokenRepositoryMock,
 	*EmailVerificationTokenRepositoryMock,
+	*CategoryRepositoryMock,
 	*EmailSenderMock,
 ) {
 	userRepoMock := new(UserRepositoryMock)
 	refreshTokenRepoMock := new(RefreshTokenRepositoryMock)
 	passwordResetRepoMock := new(PasswordResetTokenRepositoryMock)
 	emailVerificationRepoMock := new(EmailVerificationTokenRepositoryMock)
+	categoryRepoMock := new(CategoryRepositoryMock)
+	categoryService := service.NewCategoryService(categoryRepoMock)
 	emailSenderMock := new(EmailSenderMock)
 
 	authService := service.NewAuthService(
@@ -45,118 +48,19 @@ func newTestAuthService() (
 		refreshTokenRepoMock,
 		passwordResetRepoMock,
 		emailVerificationRepoMock,
+		categoryService,
 		emailSenderMock,
 		"secret_key_123",
 		1*time.Hour,
 	)
 
-	return authService, userRepoMock, refreshTokenRepoMock, passwordResetRepoMock, emailVerificationRepoMock, emailSenderMock
-}
-
-// ============ MOCKS ============
-
-type UserRepositoryMock struct{ mock.Mock }
-
-func (m *UserRepositoryMock) Register(ctx context.Context, user domain.User) (domain.User, error) {
-	args := m.Called(ctx, user)
-	return args.Get(0).(domain.User), args.Error(1)
-}
-
-func (m *UserRepositoryMock) FindByEmail(ctx context.Context, email string) (domain.User, error) {
-	args := m.Called(ctx, email)
-	return args.Get(0).(domain.User), args.Error(1)
-}
-
-func (m *UserRepositoryMock) FindByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
-	args := m.Called(ctx, id)
-	return args.Get(0).(domain.User), args.Error(1)
-}
-
-func (m *UserRepositoryMock) UpdatePassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error {
-	args := m.Called(ctx, userID, newPasswordHash)
-	return args.Error(0)
-}
-
-func (m *UserRepositoryMock) MarkEmailVerified(ctx context.Context, userID uuid.UUID) error {
-	args := m.Called(ctx, userID)
-	return args.Error(0)
-}
-
-type RefreshTokenRepositoryMock struct{ mock.Mock }
-
-func (m *RefreshTokenRepositoryMock) Create(ctx context.Context, rt *repository.RefreshToken) error {
-	args := m.Called(ctx, rt)
-	return args.Error(0)
-}
-
-func (m *RefreshTokenRepositoryMock) FindByTokenHash(ctx context.Context, tokenHash string) (*repository.RefreshToken, error) {
-	args := m.Called(ctx, tokenHash)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*repository.RefreshToken), args.Error(1)
-}
-
-func (m *RefreshTokenRepositoryMock) Revoke(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-func (m *RefreshTokenRepositoryMock) RevokeAllByUserID(ctx context.Context, userID string) error {
-	args := m.Called(ctx, userID)
-	return args.Error(0)
-}
-
-type PasswordResetTokenRepositoryMock struct{ mock.Mock }
-
-func (m *PasswordResetTokenRepositoryMock) Create(ctx context.Context, token domain.PasswordResetToken) error {
-	args := m.Called(ctx, token)
-	return args.Error(0)
-}
-
-func (m *PasswordResetTokenRepositoryMock) FindByTokenHash(ctx context.Context, tokenHash string) (domain.PasswordResetToken, error) {
-	args := m.Called(ctx, tokenHash)
-	return args.Get(0).(domain.PasswordResetToken), args.Error(1)
-}
-
-func (m *PasswordResetTokenRepositoryMock) MarkUsed(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-type EmailVerificationTokenRepositoryMock struct{ mock.Mock }
-
-func (m *EmailVerificationTokenRepositoryMock) Create(ctx context.Context, token domain.EmailVerificationToken) error {
-	args := m.Called(ctx, token)
-	return args.Error(0)
-}
-
-func (m *EmailVerificationTokenRepositoryMock) FindByTokenHash(ctx context.Context, tokenHash string) (domain.EmailVerificationToken, error) {
-	args := m.Called(ctx, tokenHash)
-	return args.Get(0).(domain.EmailVerificationToken), args.Error(1)
-}
-
-func (m *EmailVerificationTokenRepositoryMock) MarkUsed(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-type EmailSenderMock struct{ mock.Mock }
-
-func (m *EmailSenderMock) SendPasswordResetEmail(to string, resetToken string) error {
-	args := m.Called(to, resetToken)
-	return args.Error(0)
-}
-
-func (m *EmailSenderMock) SendVerificationEmail(to string, verificationToken string) error {
-	args := m.Called(to, verificationToken)
-	return args.Error(0)
+	return authService, userRepoMock, refreshTokenRepoMock, passwordResetRepoMock, emailVerificationRepoMock, categoryRepoMock, emailSenderMock
 }
 
 // ============ REGISTER ============
 
 func TestRegister_Success(t *testing.T) {
-	authService, userRepoMock, refreshTokenRepoMock, _, emailVerificationRepoMock, emailSenderMock := newTestAuthService()
+	authService, userRepoMock, refreshTokenRepoMock, _, emailVerificationRepoMock, categoryRepoMock, emailSenderMock := newTestAuthService()
 
 	req := web.RegisterRequest{
 		Name:     "Yurico",
@@ -175,6 +79,7 @@ func TestRegister_Success(t *testing.T) {
 	refreshTokenRepoMock.On("Create", mock.Anything, mock.Anything).Return(nil)
 	emailVerificationRepoMock.On("Create", mock.Anything, mock.Anything).Return(nil)
 	emailSenderMock.On("SendVerificationEmail", expectedUser.Email, mock.Anything).Return(nil)
+	categoryRepoMock.On("Create", mock.Anything, mock.Anything).Return(domain.Category{}, nil)
 
 	response, err := authService.Register(context.Background(), req)
 
@@ -189,10 +94,11 @@ func TestRegister_Success(t *testing.T) {
 	refreshTokenRepoMock.AssertExpectations(t)
 	emailVerificationRepoMock.AssertExpectations(t)
 	emailSenderMock.AssertExpectations(t)
+	categoryRepoMock.AssertNumberOfCalls(t, "Create", 8)
 }
 
 func TestRegister_Failed_EmailAlreadyExists(t *testing.T) {
-	authService, userRepoMock, _, _, _, _ := newTestAuthService()
+	authService, userRepoMock, _, _, _, _, _ := newTestAuthService()
 
 	req := web.RegisterRequest{
 		Name:     "Yurico",
@@ -215,7 +121,7 @@ func TestRegister_Failed_EmailAlreadyExists(t *testing.T) {
 }
 
 func TestRegister_Failed_RepositoryError(t *testing.T) {
-	authService, userRepoMock, _, _, _, _ := newTestAuthService()
+	authService, userRepoMock, _, _, _, _, _ := newTestAuthService()
 
 	req := web.RegisterRequest{
 		Name:     "Yurico",
@@ -241,7 +147,7 @@ func TestRegister_Failed_RepositoryError(t *testing.T) {
 // ============ LOGIN ============
 
 func TestLogin_Success(t *testing.T) {
-	authService, userRepoMock, refreshTokenRepoMock, _, _, _ := newTestAuthService()
+	authService, userRepoMock, refreshTokenRepoMock, _, _, _, _ := newTestAuthService()
 
 	passwordPlain := "password123"
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(passwordPlain), bcrypt.DefaultCost)
@@ -274,7 +180,7 @@ func TestLogin_Success(t *testing.T) {
 }
 
 func TestLogin_Failed_UserNotFound(t *testing.T) {
-	authService, userRepoMock, _, _, _, _ := newTestAuthService()
+	authService, userRepoMock, _, _, _, _, _ := newTestAuthService()
 
 	req := web.LoginRequest{
 		Email:    "wrong@example.com",
@@ -293,7 +199,7 @@ func TestLogin_Failed_UserNotFound(t *testing.T) {
 }
 
 func TestLogin_Failed_WrongPassword(t *testing.T) {
-	authService, userRepoMock, _, _, _, _ := newTestAuthService()
+	authService, userRepoMock, _, _, _, _, _ := newTestAuthService()
 
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("correct_password"), bcrypt.DefaultCost)
 
@@ -323,7 +229,7 @@ func TestLogin_Failed_WrongPassword(t *testing.T) {
 // ============ GET PROFILE ============
 
 func TestGetProfile_Success(t *testing.T) {
-	authService, userRepoMock, _, _, _, _ := newTestAuthService()
+	authService, userRepoMock, _, _, _, _, _ := newTestAuthService()
 
 	userID := uuid.New()
 	existingUser := domain.User{
@@ -345,7 +251,7 @@ func TestGetProfile_Success(t *testing.T) {
 }
 
 func TestGetProfile_Failed_InvalidUUID(t *testing.T) {
-	authService, userRepoMock, _, _, _, _ := newTestAuthService()
+	authService, userRepoMock, _, _, _, _, _ := newTestAuthService()
 
 	result, err := authService.GetProfile(context.Background(), "bukan-uuid-valid")
 
@@ -356,7 +262,7 @@ func TestGetProfile_Failed_InvalidUUID(t *testing.T) {
 }
 
 func TestGetProfile_Failed_UserNotFound(t *testing.T) {
-	authService, userRepoMock, _, _, _, _ := newTestAuthService()
+	authService, userRepoMock, _, _, _, _, _ := newTestAuthService()
 
 	userID := uuid.New()
 
@@ -373,7 +279,7 @@ func TestGetProfile_Failed_UserNotFound(t *testing.T) {
 // ============ REFRESH TOKEN ============
 
 func TestRefreshToken_Success(t *testing.T) {
-	authService, userRepoMock, refreshTokenRepoMock, _, _, _ := newTestAuthService()
+	authService, userRepoMock, refreshTokenRepoMock, _, _, _, _ := newTestAuthService()
 
 	userID := uuid.New()
 	rawToken := "some-raw-refresh-token"
@@ -406,7 +312,7 @@ func TestRefreshToken_Success(t *testing.T) {
 }
 
 func TestRefreshToken_Failed_InvalidToken(t *testing.T) {
-	authService, _, refreshTokenRepoMock, _, _, _ := newTestAuthService()
+	authService, _, refreshTokenRepoMock, _, _, _, _ := newTestAuthService()
 
 	refreshTokenRepoMock.On("FindByTokenHash", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
 
@@ -419,7 +325,7 @@ func TestRefreshToken_Failed_InvalidToken(t *testing.T) {
 }
 
 func TestRefreshToken_Failed_Reused(t *testing.T) {
-	authService, _, refreshTokenRepoMock, _, _, _ := newTestAuthService()
+	authService, _, refreshTokenRepoMock, _, _, _, _ := newTestAuthService()
 
 	stored := &repository.RefreshToken{
 		ID:        uuid.New().String(),
@@ -440,7 +346,7 @@ func TestRefreshToken_Failed_Reused(t *testing.T) {
 }
 
 func TestRefreshToken_Failed_Expired(t *testing.T) {
-	authService, _, refreshTokenRepoMock, _, _, _ := newTestAuthService()
+	authService, _, refreshTokenRepoMock, _, _, _, _ := newTestAuthService()
 
 	stored := &repository.RefreshToken{
 		ID:        uuid.New().String(),
@@ -462,7 +368,7 @@ func TestRefreshToken_Failed_Expired(t *testing.T) {
 // ============ LOGOUT ============
 
 func TestLogout_Success(t *testing.T) {
-	authService, _, refreshTokenRepoMock, _, _, _ := newTestAuthService()
+	authService, _, refreshTokenRepoMock, _, _, _, _ := newTestAuthService()
 
 	stored := &repository.RefreshToken{ID: uuid.New().String()}
 
@@ -476,7 +382,7 @@ func TestLogout_Success(t *testing.T) {
 }
 
 func TestLogout_TokenNotFound_StillSucceeds(t *testing.T) {
-	authService, _, refreshTokenRepoMock, _, _, _ := newTestAuthService()
+	authService, _, refreshTokenRepoMock, _, _, _, _ := newTestAuthService()
 
 	refreshTokenRepoMock.On("FindByTokenHash", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
 
@@ -489,7 +395,7 @@ func TestLogout_TokenNotFound_StillSucceeds(t *testing.T) {
 // ============ FORGOT PASSWORD ============
 
 func TestForgotPassword_Success(t *testing.T) {
-	authService, userRepoMock, _, passwordResetRepoMock, _, emailSenderMock := newTestAuthService()
+	authService, userRepoMock, _, passwordResetRepoMock, _, _, emailSenderMock := newTestAuthService()
 
 	existingUser := domain.User{ID: uuid.New(), Email: "yurico@example.com"}
 
@@ -506,7 +412,7 @@ func TestForgotPassword_Success(t *testing.T) {
 }
 
 func TestForgotPassword_EmailNotFound_StillSucceeds(t *testing.T) {
-	authService, userRepoMock, _, passwordResetRepoMock, _, _ := newTestAuthService()
+	authService, userRepoMock, _, passwordResetRepoMock, _, _, _ := newTestAuthService()
 
 	userRepoMock.On("FindByEmail", mock.Anything, "notfound@example.com").Return(domain.User{}, errors.New("not found"))
 
@@ -520,7 +426,7 @@ func TestForgotPassword_EmailNotFound_StillSucceeds(t *testing.T) {
 // ============ RESET PASSWORD ============
 
 func TestResetPassword_Success(t *testing.T) {
-	authService, userRepoMock, refreshTokenRepoMock, passwordResetRepoMock, _, _ := newTestAuthService()
+	authService, userRepoMock, refreshTokenRepoMock, passwordResetRepoMock, _, _, _ := newTestAuthService()
 
 	rawToken := "raw-reset-token"
 	tokenHash := sha256Hex(rawToken)
@@ -548,7 +454,7 @@ func TestResetPassword_Success(t *testing.T) {
 }
 
 func TestResetPassword_Failed_InvalidToken(t *testing.T) {
-	authService, _, _, passwordResetRepoMock, _, _ := newTestAuthService()
+	authService, _, _, passwordResetRepoMock, _, _, _ := newTestAuthService()
 
 	passwordResetRepoMock.On("FindByTokenHash", mock.Anything, mock.Anything).Return(domain.PasswordResetToken{}, errors.New("not found"))
 
@@ -559,7 +465,7 @@ func TestResetPassword_Failed_InvalidToken(t *testing.T) {
 }
 
 func TestResetPassword_Failed_AlreadyUsed(t *testing.T) {
-	authService, _, _, passwordResetRepoMock, _, _ := newTestAuthService()
+	authService, _, _, passwordResetRepoMock, _, _, _ := newTestAuthService()
 
 	storedToken := domain.PasswordResetToken{
 		ID:        uuid.New(),
@@ -576,7 +482,7 @@ func TestResetPassword_Failed_AlreadyUsed(t *testing.T) {
 }
 
 func TestResetPassword_Failed_Expired(t *testing.T) {
-	authService, _, _, passwordResetRepoMock, _, _ := newTestAuthService()
+	authService, _, _, passwordResetRepoMock, _, _, _ := newTestAuthService()
 
 	storedToken := domain.PasswordResetToken{
 		ID:        uuid.New(),
@@ -595,7 +501,7 @@ func TestResetPassword_Failed_Expired(t *testing.T) {
 // ============ VERIFY EMAIL ============
 
 func TestVerifyEmail_Success(t *testing.T) {
-	authService, userRepoMock, _, _, emailVerificationRepoMock, _ := newTestAuthService()
+	authService, userRepoMock, _, _, emailVerificationRepoMock, _, _ := newTestAuthService()
 
 	rawToken := "raw-verify-token"
 	tokenHash := sha256Hex(rawToken)
@@ -621,7 +527,7 @@ func TestVerifyEmail_Success(t *testing.T) {
 }
 
 func TestVerifyEmail_Failed_Expired(t *testing.T) {
-	authService, _, _, _, emailVerificationRepoMock, _ := newTestAuthService()
+	authService, _, _, _, emailVerificationRepoMock, _, _ := newTestAuthService()
 
 	storedToken := domain.EmailVerificationToken{
 		ID:        uuid.New(),
@@ -640,7 +546,7 @@ func TestVerifyEmail_Failed_Expired(t *testing.T) {
 // ============ RESEND VERIFICATION ============
 
 func TestResendVerification_Success(t *testing.T) {
-	authService, userRepoMock, _, _, emailVerificationRepoMock, emailSenderMock := newTestAuthService()
+	authService, userRepoMock, _, _, emailVerificationRepoMock, _, emailSenderMock := newTestAuthService()
 
 	existingUser := domain.User{ID: uuid.New(), Email: "yurico@example.com", IsVerified: false}
 
@@ -657,7 +563,7 @@ func TestResendVerification_Success(t *testing.T) {
 }
 
 func TestResendVerification_AlreadyVerified_NoEmailSent(t *testing.T) {
-	authService, userRepoMock, _, _, emailVerificationRepoMock, _ := newTestAuthService()
+	authService, userRepoMock, _, _, emailVerificationRepoMock, _, _ := newTestAuthService()
 
 	existingUser := domain.User{ID: uuid.New(), Email: "yurico@example.com", IsVerified: true}
 

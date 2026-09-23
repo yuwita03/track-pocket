@@ -32,20 +32,22 @@ type AuthService interface {
 }
 
 type AuthServiceImpl struct {
-	UserRepository                    repository.UserRepository
-	RefreshTokenRepository            repository.RefreshTokenRepository
-	PasswordResetRepository           repository.PasswordResetTokenRepository
-	EmailVerificationRepository       repository.EmailVerificationTokenRepository // ← tambah
-	EmailSender                       email.Sender
-	JWTSecret                         string
-	TokenExpiry                       time.Duration
+	UserRepository               repository.UserRepository
+	RefreshTokenRepository       repository.RefreshTokenRepository
+	PasswordResetRepository      repository.PasswordResetTokenRepository
+	EmailVerificationRepository  repository.EmailVerificationTokenRepository
+	CategoryService              CategoryService // ← tambah
+	EmailSender                  email.Sender
+	JWTSecret                    string
+	TokenExpiry                  time.Duration
 }
 
 func NewAuthService(
 	userRepo repository.UserRepository,
 	refreshTokenRepo repository.RefreshTokenRepository,
 	passwordResetRepo repository.PasswordResetTokenRepository,
-	emailVerificationRepo repository.EmailVerificationTokenRepository, // ← tambah
+	emailVerificationRepo repository.EmailVerificationTokenRepository,
+	categoryService CategoryService,
 	emailSender email.Sender,
 	jwtSecret string,
 	tokenExpiry time.Duration,
@@ -55,6 +57,7 @@ func NewAuthService(
 		RefreshTokenRepository:      refreshTokenRepo,
 		PasswordResetRepository:     passwordResetRepo,
 		EmailVerificationRepository: emailVerificationRepo,
+		CategoryService:             categoryService,
 		EmailSender:                 emailSender,
 		JWTSecret:                   jwtSecret,
 		TokenExpiry:                 tokenExpiry,
@@ -140,12 +143,15 @@ func (service *AuthServiceImpl) Register(ctx context.Context, request web.Regist
 	if err != nil {
 		return web.AuthResponse{}, err
 	}
-	refreshToken, err := service.issueRefreshToken(ctx, user.ID)
+	refreshToken, err := service.issueRefreshToken(ctx, savedUser.ID)
 	if err != nil {
 		return web.AuthResponse{}, err
 	}
 
 	if err := service.issueEmailVerificationToken(ctx, savedUser); err != nil {
+		return web.AuthResponse{}, err
+	}
+	if err := service.CategoryService.SeedDefaultCategories(ctx, savedUser.ID); err != nil { // ← tambah
 		return web.AuthResponse{}, err
 	}
 

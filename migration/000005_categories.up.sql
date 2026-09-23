@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS categories (
+    id          UUID PRIMARY KEY,
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        VARCHAR(100) NOT NULL,
+    type        VARCHAR(10) NOT NULL CHECK (type IN ('INCOME', 'EXPENSE')),
+    is_default  BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id);
