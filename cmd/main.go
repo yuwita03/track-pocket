@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	pgxdecimal "github.com/jackc/pgx-shopspring-decimal"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"trackpocket/internal/email"
@@ -97,6 +97,19 @@ func main() {
 		transactions.GET("", transactionHandler.FindAll)
 		transactions.PATCH("/:id", transactionHandler.Update)
 		transactions.DELETE("/:id", transactionHandler.Delete)
+	}
+	// Repositories — tambah 1 baris
+	dashboardRepo := repository.NewDashboardRepository(dbPool)
+	// Services — tambah 1 baris
+	dashboardService := service.NewDashboardService(dashboardRepo)
+	// Handlers — tambah 1 baris
+	dashboardHandler := handler.NewDashboardHandler(dashboardService)
+	// Routes — tambah group baru
+	dashboard := router.Group("/api/v1/dashboard")
+	dashboard.Use(middleware.JWTAuth(jwtSecret))
+	{
+		dashboard.GET("/summary", dashboardHandler.Summary)
+		dashboard.GET("/category-expenses", dashboardHandler.CategoryExpenses)
 	}
 
 	router.Run(":8080")
